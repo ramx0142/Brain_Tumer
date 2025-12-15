@@ -1,23 +1,8 @@
-import streamlit as st
-import pickle
+
+import gradio as gr
+import tensorflow as tf
 import numpy as np
-import cv2
 from PIL import Image
-
-# ------------------------------
-# Page configuration
-# ------------------------------
-st.set_page_config(
-    page_title="Brain Tumor Detection",
-    layout="centered"
-)
-
-st.title("🧠 Brain Tumor Detection using CNN")
-st.write("Upload an MRI image to predict whether a brain tumor is present.")
-
-# ------------------------------
-# Load the trained model
-# ------------------------------
 @st.cache_resource
 def load_model():
     with open("brain_tumor_model.pkl", "rb") as file:
@@ -26,52 +11,32 @@ def load_model():
 
 model = load_model()
 
-# ------------------------------
-# Image preprocessing function
-# ------------------------------
+
+
+IMG_SIZE = 224
+
 def preprocess_image(image):
-    """
-    Preprocess the uploaded MRI image
-    """
-    img = np.array(image)
+    image = image.resize((IMG_SIZE, IMG_SIZE))
+    image = np.array(image) / 255.0
+    image = np.expand_dims(image, axis=0)
+    return image
 
-    # Convert to grayscale if RGB
-    if len(img.shape) == 3:
-        img = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
+def predict_brain_tumor(image):
+    processed_image = preprocess_image(image)
+    prediction = model.predict(processed_image)[0][0]
 
-    # Resize (change to your model input size)
-    img = cv2.resize(img, (128, 128))
+    if prediction >= 0.5:
+        return "🧠 Brain Tumor Detected"
+    else:
+        return "✅ No Brain Tumor Detected"
 
-    # Normalize
-    img = img / 255.0
-
-    # Reshape for CNN: (1, height, width, channels)
-    img = img.reshape(1, 128, 128, 1)
-
-    return img
-
-# ------------------------------
-# File uploader
-# ------------------------------
-uploaded_file = st.file_uploader(
-    "Upload MRI Image",
-    type=["jpg", "jpeg", "png"]
+# Gradio Interface
+interface = gr.Interface(
+    fn=predict_brain_tumor,
+    inputs=gr.Image(type="pil", label="Upload Brain MRI Image"),
+    outputs=gr.Textbox(label="Prediction"),
+    title="Brain Tumor Detection using CNN",
+    description="Upload a brain MRI image to detect the presence of a tumor."
 )
 
-if uploaded_file is not None:
-    image = Image.open(uploaded_file)
-    st.image(image, caption="Uploaded MRI Image", use_container_width=True)
-
-    if st.button("Predict"):
-        with st.spinner("Analyzing image..."):
-            processed_img = preprocess_image(image)
-            prediction = model.predict(processed_img)
-
-            # Binary classification threshold
-            result = "Tumor Detected" if prediction[0][0] > 0.5 else "No Tumor Detected"
-
-        st.subheader("Prediction Result")
-        if result == "Tumor Detected":
-            st.error(result)
-        else:
-            st.success(result)
+interface.launch()
